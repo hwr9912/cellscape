@@ -16,6 +16,7 @@ __all__ = [
     "local_correlation_plot",
     "spatial_expression_panels",
     "spatial_scatter",
+    "umap_expr_with_category",
     "umap_highlight",
 ]
 
@@ -32,7 +33,11 @@ def __getattr__(name: str):
         from cellscape import spatial
 
         return getattr(spatial, name)
-    if name in {"local_correlation_plot", "umap_highlight"}:
+    if name in {
+        "local_correlation_plot",
+        "umap_expr_with_category",
+        "umap_highlight",
+    }:
         from cellscape import single_cell
 
         return getattr(single_cell, name)
