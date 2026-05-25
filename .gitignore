@@ -1,0 +1,24 @@
+# 忽略prompt命令文件
+prompt.md
+
+# 忽略掉改编依据python文件
+raw_*.py
+**/raw_*.py
+
+# Python build/cache files
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+# 测试文件夹里面的图片也不保存
+tests/*.png
+
+# 忽略掉所有的示例数据
+*.h5ad
+
+# macOS metadata files on external drives
+._*

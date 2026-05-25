@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cellscape"
+version = "0.1.0"
+description = "Custom visualization tools for single-cell and spatial omics analysis."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "William Han" }]
+dependencies = [
+  "anndata",
+  "matplotlib",
+  "numpy",
+  "pandas",
+  "scanpy",
+  "scipy",
+  "seaborn",
+  "squidpy",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+interactive = ["plotly"]
+all = ["pytest", "ruff", "plotly"]
+
+# 要打包 / 安装的 Python 包在哪个目录下面
+[tool.hatch.build.targets.wheel]
+packages = ["src/cellscape"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
