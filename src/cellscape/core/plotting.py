@@ -13,8 +13,8 @@ def apply_publication_defaults() -> None:
     """
     指定matplotlib相关的全局图片保存参数
     """
-    # 使用等线字体
-    mpl.rcParams["font.family"] = "Arial"
+    # # 使用等线字体
+    # mpl.rcParams["font.family"] = "Arial"
     # 文字作为可编辑字符串而不是形状存储
     mpl.rcParams["pdf.fonttype"] = 42
 

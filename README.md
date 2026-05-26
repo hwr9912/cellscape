@@ -29,6 +29,12 @@ cellscape/
 └── docs/               # Documentation drafts
 ```
 
+## Install
+
+```bash
+pip install git+https://github.com/hwr9912/cellscape.git
+```
+
 ## Development
 
 Install locally:
