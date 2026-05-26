@@ -14,8 +14,10 @@ __pycache__/
 dist/
 build/
 
-# 测试文件夹里面的图片也不保存
+# 测试文件夹
 tests/*.png
+tests/library_backgrounds/
+tests/data/
 
 # 忽略掉所有的示例数据
 *.h5ad

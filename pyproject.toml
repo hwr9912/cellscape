@@ -11,6 +11,7 @@ requires-python = ">=3.12"
 authors = [{ name = "William Han" }]
 dependencies = [
   "anndata",
+  "glasbey",
   "matplotlib",
   "numpy",
   "pandas",

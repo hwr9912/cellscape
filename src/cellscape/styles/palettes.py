@@ -38,3 +38,10 @@ def seurat_grey_to_blue(
         colors=SEURAT_GREY_TO_BLUE,
         N=n_colors,
     )
+
+
+def glasbey_palette(n_colors: int) -> list[str]:
+    """Generate categorical colors with glasbey."""
+    import glasbey
+
+    return glasbey.create_palette(n_colors)
