@@ -223,7 +223,7 @@ def spatial_expression_panels(
 def highlight_clusters_panels(
     adata: Any,
     color_key: str,
-    select_cluster: str | Sequence[str],
+    select_cluster: str | Sequence[str] | None,
     panels: Sequence[str],
     *,
     library_key: str = "library",
@@ -231,6 +231,7 @@ def highlight_clusters_panels(
     na_color: str = "#DEDEDE",
     size: float = 50,
     legend_title: str = "cluster",
+    ncols: int | None = None,
     img: str | bool = False,
     show: bool = True,
     save: str | Path | None = None,
@@ -242,13 +243,14 @@ def highlight_clusters_panels(
     ### Parameters:
     - `adata: Any` 绘制依赖的数据,
     - `color_key: str` 选择哪个obs列作为上色依据,
-    - `select_cluster: str | Sequence[str]` 选择哪些/哪个值作为高亮群,
+    - `select_cluster: str | Sequence[str] | None` 选择哪些/哪个值作为高亮群, 为None时显示所有群的原始配色,
     - `panels: Sequence[str]` 每个panel显示哪个library,
     - `library_key: str = "library"` 存储library的名称对应的obs列名,
     - `spatial_key: str = "spatial"` 对应`sq.pl.spatial_scatter`同名参数,
     - `na_color: str = "#DEDEDE"` 指定上色obs列有NA值对应的颜色,
     - `size: float = 50` spot的大小,
     - `legend_title: str = "cluster"` 图例的标题,
+    - `ncols: int | None = None` panel列数, 为None时最多每行4列,
     - `img: str | bool = False` 是否显示背景图,
     - `show: bool = True` 是否显示,
     - `save: str | Path | None = None` 保存位置
@@ -276,9 +278,7 @@ def highlight_clusters_panels(
     """
     apply_publication_defaults()
 
-    # 提取高亮群
-    select_cluster = _as_list(select_cluster)
-    selected = {str(item) for item in select_cluster}
+    # 提取所有类别
     adata_plt = adata.copy()
     cats = adata_plt.obs[color_key].astype("category").cat.categories
     # 提取颜色，没有预设颜色时按类别数量自动生成
@@ -295,11 +295,17 @@ def highlight_clusters_panels(
         )
         adata_plt.uns[color_key_colors] = glasbey_palette(len(cats))
     color_map = pd.Series(adata_plt.uns[color_key_colors], index=cats)
-    adata_plt.uns[color_key_colors] = [
-        row if str(idx) in selected else na_color for idx, row in color_map.items()
-    ]
+    if select_cluster is not None:
+        # 提取高亮群
+        selected = {str(item) for item in _as_list(select_cluster)}
+        adata_plt.uns[color_key_colors] = [
+            row if str(idx) in selected else na_color for idx, row in color_map.items()
+        ]
 
-    ncols = min(4, len(panels))
+    if ncols is None:
+        ncols = min(4, len(panels))
+    if ncols < 1:
+        raise ValueError("ncols must be at least 1.")
     nrows = int(np.ceil(len(panels) / ncols))
     fig, axes = plt.subplots(
         nrows,
