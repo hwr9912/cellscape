@@ -28,11 +28,11 @@ def _as_list(value: str | Sequence[str]) -> list[str]:
     return list(value)
 
 
-def _try_int(value: Any) -> Any:
+def _try_int(value: Any) -> tuple[int, int | str]:
     try:
-        return int(value)
+        return (0, int(value))
     except (TypeError, ValueError):
-        return value
+        return (1, str(value))
 
 
 def _get_values(adata: Any, color: str, *, layer: str | None = None) -> pd.Series:
