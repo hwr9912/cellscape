@@ -9,10 +9,14 @@ except PackageNotFoundError:
 
 __all__ = [
     "__version__",
+    "LabelmeMaskResult",
+    "batch_labelme_to_masks",
     "cell_boundary_plot",
     "cellscape_continuous_cmap",
     "highlight_and_expression_grid",
     "highlight_clusters_panels",
+    "labelme_to_mask",
+    "labelme_to_masks",
     "local_correlation_plot",
     "spatial_expression_panels",
     "spatial_scatter",
@@ -33,6 +37,15 @@ def __getattr__(name: str):
         from cellscape import spatial
 
         return getattr(spatial, name)
+    if name in {
+        "LabelmeMaskResult",
+        "batch_labelme_to_masks",
+        "labelme_to_mask",
+        "labelme_to_masks",
+    }:
+        from cellscape import datasets
+
+        return getattr(datasets, name)
     if name in {
         "local_correlation_plot",
         "umap_expr_with_category",

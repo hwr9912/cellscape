@@ -1,5 +1,5 @@
 # 忽略prompt命令文件
-prompt.md
+prompt/
 
 # 忽略掉改编依据python文件
 raw_*.py
@@ -24,3 +24,6 @@ tests/data/
 
 # macOS metadata files on external drives
 ._*
+
+# vscode个性化设置
+.vscode/
