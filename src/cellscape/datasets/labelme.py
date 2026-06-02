@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -29,6 +30,33 @@ class LabelmeMaskResult:
     class_names_file: Path
     labels: tuple[str, ...]
     class_ids: dict[str, int]
+
+
+@contextmanager
+def _pillow_image_size_limit(allow_large_images: bool) -> Iterator[None]:
+    previous_limit = Image.MAX_IMAGE_PIXELS
+    if allow_large_images:
+        Image.MAX_IMAGE_PIXELS = None
+    try:
+        yield
+    finally:
+        Image.MAX_IMAGE_PIXELS = previous_limit
+
+
+def _open_image(
+    image_path: str | Path,
+    *,
+    allow_large_images: bool,
+) -> Image.Image:
+    try:
+        with _pillow_image_size_limit(allow_large_images):
+            return Image.open(image_path)
+    except Image.DecompressionBombError as exc:
+        raise RuntimeError(
+            "图片尺寸超过 Pillow 的安全限制。"
+            "如果你已经确认图片来源可信，并且机器内存足够生成同尺寸 mask，"
+            "请设置 `allow_large_images=True` 后重试。"
+        ) from exc
 
 
 def _read_labelme_json(annotation_json_path: str | Path) -> dict[str, Any]:
@@ -188,8 +216,12 @@ def _save_visualization(
     output_path: Path,
     *,
     alpha: float,
+    allow_large_images: bool,
 ) -> None:
-    base = Image.open(image_path).convert("RGBA")
+    base = _open_image(
+        image_path,
+        allow_large_images=allow_large_images,
+    ).convert("RGBA")
     overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
     overlay_array = np.asarray(overlay).copy()
     colors = _visualization_colors(labels)
@@ -262,7 +294,8 @@ def labelme_to_mask(
     labels: Sequence[str] = DEFAULT_LABELS,
     output_dir: str | Path | None = None,
     sample_id: str | None = None,
-    visualization_alpha: float = 0.35,
+    visualization_alpha: float | None = 0.35,
+    allow_large_images: bool = False,
 ) -> LabelmeMaskResult:
     """
     将单个 labelme 注释文件转换为按类别拆分的灰度二值 mask 数据集
@@ -276,11 +309,20 @@ def labelme_to_mask(
     - `labels: Sequence[str] = DEFAULT_LABELS` label 顺序，遵循官方 `__ignore__`、`_background_` 约定,
     - `output_dir: str | Path | None = None` 输出根目录；默认是 json 同目录下的 `mask`,
     - `sample_id: str | None = None` 输出样本名；默认使用 json 文件名,
-    - `visualization_alpha: float = 0.35` 可视化叠加透明度
+    - `visualization_alpha: float | None = 0.35` 可视化叠加透明度；为 None 时跳过可视化,
+    - `allow_large_images: bool = False` 是否忽略 Pillow 图片大小安全限制；
+      仅在确认图片可信且内存足够生成同尺寸 mask 时设置为 True
 
     ### Example
     ```python
+    import cellscape.datasets as dts
 
+    dts.labelme_to_mask(
+        image_path="data/labelme_test/random1.tif",
+        annotation_json_path="data/labelme_test/random1.json",
+        labels=["__ignore__", "_background_", "test"],
+        output_dir="data/labelme_test/mask",
+    )
     ```
     """
     annotation_json_path = Path(annotation_json_path)
@@ -290,7 +332,7 @@ def labelme_to_mask(
 
     data = _read_labelme_json(annotation_json_path)
     image_path = _resolve_image_path(annotation_json_path, data, image_path)
-    with Image.open(image_path) as img:
+    with _open_image(image_path, allow_large_images=allow_large_images) as img:
         width, height = img.size
 
     sample_id = _sample_id_from_json(annotation_json_path, sample_id)
@@ -313,13 +355,15 @@ def labelme_to_mask(
 
     class_npy.parent.mkdir(parents=True, exist_ok=True)
     np.save(class_npy, np.stack(stacked_masks, axis=0).astype(np.uint8))
-    _save_visualization(
-        image_path,
-        masks,
-        labels,
-        visualization_jpg,
-        alpha=visualization_alpha,
-    )
+    if visualization_alpha is not None:
+        _save_visualization(
+            image_path,
+            masks,
+            labels,
+            visualization_jpg,
+            alpha=visualization_alpha,
+            allow_large_images=allow_large_images,
+        )
 
     return LabelmeMaskResult(
         output_dir=output_dir,
@@ -342,7 +386,8 @@ def labelme_to_masks(
     labels: Sequence[str] = DEFAULT_LABELS,
     pattern: str = "*.json",
     recursive: bool = False,
-    visualization_alpha: float = 0.35,
+    visualization_alpha: float | None = 0.35,
+    allow_large_images: bool = False,
 ) -> list[LabelmeMaskResult]:
     """
     批量将 labelme 注释 json 转换为按类别拆分的灰度二值 mask 数据集
@@ -357,11 +402,20 @@ def labelme_to_masks(
     - `labels: Sequence[str] = DEFAULT_LABELS` label 顺序，遵循官方 `__ignore__`、`_background_` 约定,
     - `pattern: str = "*.json"` json 文件匹配模式,
     - `recursive: bool = False` 是否递归扫描 annotation_dir,
-    - `visualization_alpha: float = 0.35` 可视化叠加透明度
+    - `visualization_alpha: float | None = 0.35` 可视化叠加透明度；为 None 时跳过可视化,
+    - `allow_large_images: bool = False` 是否忽略 Pillow 图片大小安全限制；
+      仅在确认图片可信且内存足够生成同尺寸 mask 时设置为 True
 
     ### Example
     ```python
+    import cellscape.datasets as dts
 
+    dts.labelme_to_masks(
+        annotation_dir="library_backgrounds",
+        image_dir="library_backgrounds",
+        output_dir="library_backgrounds/mask",
+        labels=["__ignore__", "_background_", "test"],
+    )
     ```
     """
     annotation_dir = Path(annotation_dir)
@@ -393,6 +447,7 @@ def labelme_to_masks(
                 labels=labels,
                 output_dir=output_dir,
                 visualization_alpha=visualization_alpha,
+                allow_large_images=allow_large_images,
             )
         )
 
