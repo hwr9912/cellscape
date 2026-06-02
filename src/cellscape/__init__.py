@@ -2,6 +2,8 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
+from cellscape.spatial.annotation import project_labelme_masks_to_obs
+
 try:
     __version__ = version("cellscape")
 except PackageNotFoundError:
@@ -18,6 +20,7 @@ __all__ = [
     "labelme_to_mask",
     "labelme_to_masks",
     "local_correlation_plot",
+    "project_labelme_masks_to_obs",
     "spatial_expression_panels",
     "spatial_scatter",
     "umap_expr_with_category",
