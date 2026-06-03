@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -26,12 +27,18 @@ def finish_figure(
     show: bool = True,
     dpi: int = 300,
     bbox_inches: str = "tight",
+    bbox_extra_artists: Sequence[Any] | None = None,
 ) -> Any:
     """
     Save and optionally show a figure, then return it.
     """
     if save is not None:
-        fig.savefig(save, dpi=dpi, bbox_inches=bbox_inches)
+        fig.savefig(
+            save,
+            dpi=dpi,
+            bbox_inches=bbox_inches,
+            bbox_extra_artists=bbox_extra_artists,
+        )
     if show:
         plt.show()
     return fig

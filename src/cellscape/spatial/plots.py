@@ -66,6 +66,7 @@ def spatial_scatter(
     title: str | None = None,
     frameon: bool = False,
     legend: bool = True,
+    legend_bbox_to_anchor: tuple[float, float] = (1.02, 1),
     show: bool = True,
     save: str | Path | None = None,
     **scatter_kwargs: Any,
@@ -86,6 +87,7 @@ def spatial_scatter(
     else:
         fig = ax.figure
 
+    legend_artist = None
     if pd.api.types.is_numeric_dtype(values):
         scatter = ax.scatter(
             coords[:, 0],
@@ -124,13 +126,24 @@ def spatial_scatter(
                 mpatches.Patch(color=color_map[cat], label=str(cat))
                 for cat in sorted(cats, key=_try_int)
             ]
-            ax.legend(handles=handles, frameon=False, bbox_to_anchor=(1.02, 1), loc="upper left")
+            legend_artist = ax.legend(
+                handles=handles,
+                frameon=False,
+                bbox_to_anchor=legend_bbox_to_anchor,
+                loc="upper left",
+            )
 
     ax.set_title(title or color)
     ax.set_aspect("equal")
     if not frameon:
         ax.set_axis_off()
-    finish_figure(fig, save=save, show=show)
+    bbox_extra_artists = None if legend_artist is None else [legend_artist]
+    finish_figure(
+        fig,
+        save=save,
+        show=show,
+        bbox_extra_artists=bbox_extra_artists,
+    )
     return fig, ax
 
 
@@ -231,6 +244,7 @@ def highlight_clusters_panels(
     na_color: str = "#DEDEDE",
     size: float = 50,
     legend_title: str = "cluster",
+    legend_bbox_to_anchor: tuple[float, float] = (1.1, 0.5),
     ncols: int | None = None,
     img: str | bool = False,
     show: bool = True,
@@ -250,6 +264,7 @@ def highlight_clusters_panels(
     - `na_color: str = "#DEDEDE"` 指定上色obs列有NA值对应的颜色,
     - `size: float = 50` spot的大小,
     - `legend_title: str = "cluster"` 图例的标题,
+    - `legend_bbox_to_anchor: tuple[float, float] = (1.1, 0.5)` 图例锚点位置,
     - `ncols: int | None = None` panel列数, 为None时最多每行4列,
     - `img: str | bool = False` 是否显示背景图,
     - `show: bool = True` 是否显示,
@@ -345,16 +360,16 @@ def highlight_clusters_panels(
         mpatches.Patch(color=color_map[cat], label=str(cat))
         for cat in sorted(cats, key=_try_int)
     ]
-    fig.legend(
+    legend_artist = fig.legend(
         handles=handles,
         loc="center right",
-        bbox_to_anchor=(1.05, 0.5),
+        bbox_to_anchor=legend_bbox_to_anchor,
         ncol=1,
         frameon=False,
         title=legend_title,
     )
     # 保存图片
-    finish_figure(fig, save=save, show=show)
+    finish_figure(fig, save=save, show=show, bbox_extra_artists=[legend_artist])
     return fig, axes_flat
 
 
@@ -374,6 +389,7 @@ def highlight_and_expression_grid(
     na_color: str = "#DEDEDE",
     cmap: str = "rainbow",
     img_group: str | bool = False,
+    legend_bbox_to_anchor: tuple[float, float] = (1.05, 0.02),
     show: bool = True,
     save: str | Path | None = None,
     **kwargs: Any,
@@ -400,6 +416,7 @@ def highlight_and_expression_grid(
     - `na_color: str = "#DEDEDE"` 未选中分类或NA值对应的颜色,
     - `cmap: str = "rainbow"` 连续变量使用的颜色条,
     - `img_group: str | bool = False` 最后一行 `group_key` 分类图是否显示背景图,
+    - `legend_bbox_to_anchor: tuple[float, float] = (1.05, 0.02)` 图例锚点位置,
     - `show: bool = True` 是否显示,
     - `save: str | Path | None = None` 保存位置,
     - `**kwargs: Any` 传递给`sq.pl.spatial_scatter`的其他参数
@@ -513,13 +530,13 @@ def highlight_and_expression_grid(
         mpatches.Patch(color=color_map[cat], label=str(cat))
         for cat in sorted(cats, key=_try_int)
     ]
-    fig.legend(
+    legend_artist = fig.legend(
         handles=handles,
         loc="lower right",
-        bbox_to_anchor=(1.05, 0.02),
+        bbox_to_anchor=legend_bbox_to_anchor,
         ncol=1,
         frameon=False,
         title="cluster",
     )
-    finish_figure(fig, save=save, show=show)
+    finish_figure(fig, save=save, show=show, bbox_extra_artists=[legend_artist])
     return fig, axes
