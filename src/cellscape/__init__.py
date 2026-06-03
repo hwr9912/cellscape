@@ -2,7 +2,14 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-from cellscape.spatial.annotation import project_labelme_masks_to_obs
+from cellscape.spatial import (
+    cell_boundary_plot,
+    highlight_and_expression_grid,
+    highlight_clusters_panels,
+    project_labelme_masks_to_obs,
+    spatial_expression_panels,
+    spatial_scatter,
+)
 
 try:
     __version__ = version("cellscape")
@@ -29,17 +36,7 @@ __all__ = [
 
 
 def __getattr__(name: str):
-    """Lazily expose plotting helpers without drawing or loading data on import."""
-    if name in {
-        "cell_boundary_plot",
-        "highlight_and_expression_grid",
-        "highlight_clusters_panels",
-        "spatial_expression_panels",
-        "spatial_scatter",
-    }:
-        from cellscape import spatial
-
-        return getattr(spatial, name)
+    """Lazily expose non-spatial helper modules."""
     if name in {
         "LabelmeMaskResult",
         "batch_labelme_to_masks",
