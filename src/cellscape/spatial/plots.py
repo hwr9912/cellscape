@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 import warnings
 
 import matplotlib.patches as mpatches
@@ -33,6 +33,13 @@ def _try_int(value: Any) -> tuple[int, int | str]:
         return (0, int(value))
     except (TypeError, ValueError):
         return (1, str(value))
+
+
+def _remove_axes_legends(axes: Sequence[plt.Axes]) -> None:
+    for ax in axes:
+        legend = ax.get_legend()
+        if legend is not None:
+            legend.remove()
 
 
 def _get_values(adata: Any, color: str, *, layer: str | None = None) -> pd.Series:
@@ -245,6 +252,7 @@ def highlight_clusters_panels(
     size: float = 50,
     legend_title: str = "cluster",
     legend_bbox_to_anchor: tuple[float, float] = (1.1, 0.5),
+    legend_on_data: Literal["on data"] | None = "on data",
     ncols: int | None = None,
     img: str | bool = False,
     show: bool = True,
@@ -265,6 +273,7 @@ def highlight_clusters_panels(
     - `size: float = 50` spot的大小,
     - `legend_title: str = "cluster"` 图例的标题,
     - `legend_bbox_to_anchor: tuple[float, float] = (1.1, 0.5)` 图例锚点位置,
+    - `legend_on_data: Literal["on data"] | None = "on data"` 是否在每个小图上显示类别文字,
     - `ncols: int | None = None` panel列数, 为None时最多每行4列,
     - `img: str | bool = False` 是否显示背景图,
     - `show: bool = True` 是否显示,
@@ -292,6 +301,8 @@ def highlight_clusters_panels(
     ```
     """
     apply_publication_defaults()
+    if legend_on_data not in {"on data", None}:
+        raise ValueError("`legend_on_data` 只能是 'on data' 或 None")
 
     # 提取所有类别
     adata_plt = adata.copy()
@@ -343,7 +354,7 @@ def highlight_clusters_panels(
             img=img,
             na_color=na_color,
             frameon=False,
-            legend_loc="on data",
+            legend_loc=legend_on_data,
             legend_fontsize=8,
             legend_fontweight="normal",
             ax=ax,
@@ -354,6 +365,8 @@ def highlight_clusters_panels(
 
     for ax in axes_flat[len(panels):]:
         ax.axis("off")
+    if legend_on_data is None:
+        _remove_axes_legends(axes_flat)
     
     # 合并图例
     handles = [
@@ -390,6 +403,7 @@ def highlight_and_expression_grid(
     cmap: str = "rainbow",
     img_group: str | bool = False,
     legend_bbox_to_anchor: tuple[float, float] = (1.05, 0.02),
+    legend_on_data: Literal["on data"] | None = "on data",
     show: bool = True,
     save: str | Path | None = None,
     **kwargs: Any,
@@ -417,6 +431,7 @@ def highlight_and_expression_grid(
     - `cmap: str = "rainbow"` 连续变量使用的颜色条,
     - `img_group: str | bool = False` 最后一行 `group_key` 分类图是否显示背景图,
     - `legend_bbox_to_anchor: tuple[float, float] = (1.05, 0.02)` 图例锚点位置,
+    - `legend_on_data: Literal["on data"] | None = "on data"` 是否在每个小图上显示类别文字,
     - `show: bool = True` 是否显示,
     - `save: str | Path | None = None` 保存位置,
     - `**kwargs: Any` 传递给`sq.pl.spatial_scatter`的其他参数
@@ -445,6 +460,8 @@ def highlight_and_expression_grid(
     """
     # matplotlib全局绘图常数
     apply_publication_defaults()
+    if legend_on_data not in {"on data", None}:
+        raise ValueError("`legend_on_data` 只能是 'on data' 或 None")
     # 硬复制防篡改原始数据
     adata_plt = adata.copy()
     # 提取最下面一行分组变量的所有类别
@@ -517,7 +534,7 @@ def highlight_and_expression_grid(
                 na_color=na_color,
                 cmap=cmap,
                 frameon=False,
-                legend_loc="on data",
+                legend_loc=legend_on_data,
                 legend_fontsize=8,
                 legend_fontweight="normal",
                 ax=axes[row_idx, col_idx],
@@ -525,6 +542,8 @@ def highlight_and_expression_grid(
                 **kwargs,
             )
             axes[row_idx, col_idx].set_aspect("equal")
+    if legend_on_data is None:
+        _remove_axes_legends(axes.ravel())
 
     handles = [
         mpatches.Patch(color=color_map[cat], label=str(cat))

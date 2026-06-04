@@ -3,14 +3,27 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Iterator, Literal
 
 import numpy as np
 from PIL import Image
 from tqdm.auto import tqdm
 
 from cellscape.core.validation import get_spatial_coordinates
+
+
+@contextmanager
+def _pillow_image_size_limit(allow_large_images: bool) -> Iterator[None]:
+    """临时控制 Pillow 的图片大小安全限制, 并在退出时恢复原值"""
+    previous_limit = Image.MAX_IMAGE_PIXELS
+    if allow_large_images:
+        Image.MAX_IMAGE_PIXELS = None
+    try:
+        yield
+    finally:
+        Image.MAX_IMAGE_PIXELS = previous_limit
 
 
 def _normalize_projection_labels(labels: Sequence[str]) -> tuple[str, ...]:
@@ -59,8 +72,9 @@ def _load_png_masks(path: str | Path, labels: Sequence[str]) -> np.ndarray:
     masks = []
     expected_shape: tuple[int, int] | None = None
     for png_file in png_files:
-        with Image.open(png_file) as image:
-            mask = np.asarray(image.convert("L")) > 0
+        with _pillow_image_size_limit(allow_large_images=True):
+            with Image.open(png_file) as image:
+                mask = np.asarray(image.convert("L")) > 0
         if expected_shape is None:
             expected_shape = mask.shape
         elif mask.shape != expected_shape:
