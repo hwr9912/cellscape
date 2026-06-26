@@ -1,0 +1,19 @@
+site_name: cellscape
+site_description: 单细胞和空间组学可视化与注释辅助工具包
+repo_url: https://github.com/hwr9912/cellscape
+theme:
+  name: material
+  language: zh
+nav:
+  - 首页: index.md
+  - 安装: installation.md
+  - 快速开始: quickstart.md
+  - 空间组学绘图: spatial.md
+  - 单细胞绘图: single-cell.md
+  - labelme 注释流程: labelme.md
+  - API 速查: api.md
+  - GitHub Pages 部署: github-pages.md
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true

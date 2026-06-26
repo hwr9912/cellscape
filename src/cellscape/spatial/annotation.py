@@ -2,16 +2,171 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Literal
 
 import numpy as np
+import pandas as pd
 from PIL import Image
 from tqdm.auto import tqdm
 
 from cellscape.core.validation import get_spatial_coordinates
+
+
+def _as_column_tuple(columns: str | Sequence[str], *, name: str) -> tuple[str, ...]:
+    """把单个列名或列名序列标准化为 tuple, 并拒绝空值。"""
+    if isinstance(columns, str):
+        normalized = (columns,)
+    else:
+        normalized = tuple(columns)
+    if not normalized:
+        raise ValueError(f"`{name}` 至少需要包含一个列名")
+    if not all(isinstance(column, str) and column for column in normalized):
+        raise ValueError(f"`{name}` 必须是非空字符串或非空字符串列表")
+    return normalized
+
+
+def _duplicated_key_preview(frame: pd.DataFrame, columns: Sequence[str]) -> list[Any]:
+    """返回重复索引键的少量预览, 用于错误信息。"""
+    duplicated = frame.loc[:, list(columns)].duplicated(keep=False)
+    preview = frame.loc[duplicated, list(columns)].drop_duplicates().head(5)
+    if len(columns) == 1:
+        return preview.iloc[:, 0].tolist()
+    return [tuple(row) for row in preview.to_numpy()]
+
+
+def _ensure_unique_keys(
+    frame: pd.DataFrame,
+    columns: Sequence[str],
+    *,
+    frame_name: str,
+) -> None:
+    """检查指定列组合是否唯一。"""
+    if frame.loc[:, list(columns)].duplicated(keep=False).any():
+        preview = _duplicated_key_preview(frame, columns)
+        raise ValueError(
+            f"{frame_name} 中索引列 {list(columns)!r} 对应的索引不唯一; "
+            f"重复示例: {preview}"
+        )
+
+
+def _ensure_assignable_categories(
+    obs: pd.DataFrame,
+    column: str,
+    values: pd.Series,
+) -> None:
+    """如果目标列是 category, 先补齐即将写入的新类别。"""
+    if not isinstance(obs[column].dtype, pd.CategoricalDtype):
+        return
+    new_values = pd.Series(values).dropna().unique()
+    categories = obs[column].cat.categories
+    missing = [value for value in new_values if value not in categories]
+    if missing:
+        obs[column] = obs[column].cat.add_categories(missing)
+
+
+def update_obs_columns_from_dataframe(
+    adata: Any,
+    df: pd.DataFrame,
+    index_columns: str | Sequence[str],
+    replace_columns: str | Sequence[str],
+    replaced_columns: str | Sequence[str],
+    *,
+    check_adata_index_unique: bool = True,
+    inplace: bool = True,
+) -> Any | None:
+    """
+    使用外部 dataframe 按索引列局部更新 `adata.obs` 中的列。
+
+    函数会根据 `index_columns` 在 `df` 和 `adata.obs` 之间匹配行。
+    能在 `df` 中找到对应索引的 `adata.obs` 行会被更新;
+    找不到对应索引的行保持不变。
+    `replace_columns` 是 `df` 中提供新值的列, `replaced_columns` 是
+    `adata.obs` 中被写入的目标列, 二者必须一一对应。
+
+    ### Parameters
+    - `adata: Any` 原始 AnnData 对象
+    - `df: pd.DataFrame` 包含索引列和替换列的 dataframe
+    - `index_columns: str | Sequence[str]` 用于匹配的索引列名
+    - `replace_columns: str | Sequence[str]` `df` 中提供新值的列名
+    - `replaced_columns: str | Sequence[str]` `adata.obs` 中被替换的列名
+    - `check_adata_index_unique: bool = True` 是否把 `adata.obs`
+      索引不唯一作为错误; 为 False 时仍检查, 但只发出 warning
+    - `inplace: bool = True` 是否原位修改输入 `adata`
+    """
+    index_columns = _as_column_tuple(index_columns, name="index_columns")
+    replace_columns = _as_column_tuple(replace_columns, name="replace_columns")
+    replaced_columns = _as_column_tuple(replaced_columns, name="replaced_columns")
+    if len(replace_columns) != len(replaced_columns):
+        raise ValueError(
+            "`replace_columns` 和 `replaced_columns` 的长度必须一致"
+        )
+
+    missing_df_index_columns = [column for column in index_columns if column not in df]
+    if missing_df_index_columns:
+        raise KeyError(f"df 缺少索引列: {missing_df_index_columns}")
+
+    missing_replace_columns = [column for column in replace_columns if column not in df]
+    if missing_replace_columns:
+        raise KeyError(f"df 缺少替换列: {missing_replace_columns}")
+
+    missing_obs_index_columns = [
+        column for column in index_columns if column not in adata.obs
+    ]
+    if missing_obs_index_columns:
+        raise KeyError(f"adata.obs 缺少索引列: {missing_obs_index_columns}")
+
+    _ensure_unique_keys(df, index_columns, frame_name="df")
+
+    duplicated_obs_keys = adata.obs.loc[:, list(index_columns)].duplicated(keep=False)
+    if duplicated_obs_keys.any():
+        preview = _duplicated_key_preview(adata.obs, index_columns)
+        message = (
+            f"adata.obs 中索引列 {list(index_columns)!r} 对应的索引不唯一; "
+            f"重复示例: {preview}"
+        )
+        if check_adata_index_unique:
+            raise ValueError(message)
+        warnings.warn(message, UserWarning, stacklevel=2)
+
+    target = adata if inplace else adata.copy()
+    missing_replaced_columns = [
+        column for column in replaced_columns if column not in target.obs
+    ]
+    for column in missing_replaced_columns:
+        target.obs.loc[:, column] = pd.NA
+    if missing_replaced_columns:
+        warnings.warn(
+            "adata.obs 缺少被替换列, 已创建并填充为 NA: "
+            f"{missing_replaced_columns}",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    df_keys = pd.MultiIndex.from_frame(df.loc[:, list(index_columns)])
+    obs_keys = pd.MultiIndex.from_frame(target.obs.loc[:, list(index_columns)])
+    matched = obs_keys.isin(df_keys)
+    if not matched.any():
+        raise ValueError(
+            f"adata.obs 中没有任何行能根据索引列 {list(index_columns)!r} 匹配到 df"
+        )
+
+    for replace_column, replaced_column in zip(
+        replace_columns,
+        replaced_columns,
+        strict=True,
+    ):
+        values_by_key = pd.Series(df[replace_column].to_numpy(), index=df_keys)
+        new_values = values_by_key.reindex(obs_keys[matched])
+        _ensure_assignable_categories(target.obs, replaced_column, new_values)
+        target.obs.loc[matched, replaced_column] = new_values.to_numpy()
+
+    if inplace:
+        return None
+    return target
 
 
 @contextmanager

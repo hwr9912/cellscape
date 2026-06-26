@@ -18,7 +18,11 @@ from cellscape.core.plotting import (
     as_axes_array,
     finish_figure,
 )
-from cellscape.core.validation import get_spatial_coordinates, require_color_key
+from cellscape.core.validation import (
+    get_spatial_coordinates,
+    require_color_key,
+    require_obs_keys,
+)
 from cellscape.styles.palettes import glasbey_palette
 
 
@@ -303,6 +307,16 @@ def highlight_clusters_panels(
     apply_publication_defaults()
     if legend_on_data not in {"on data", None}:
         raise ValueError("`legend_on_data` 只能是 'on data' 或 None")
+    # 传入参数检查
+    var_names = getattr(adata, "var_names", [])
+    if color_key not in adata.obs:
+        if color_key in var_names:
+            raise KeyError(
+                f"{color_key!r} 是 adata.var_names 中的基因名，但 "
+                "highlight_clusters_panels() 需要传入 adata.obs 中的分类列。"
+                "如果要绘制基因表达量面板，请使用 spatial_expression_panels()。"
+            )
+        require_obs_keys(adata, color_key)
 
     # 提取所有类别
     adata_plt = adata.copy()

@@ -1,6 +1,9 @@
 """Spatial transcriptomics visualization tools."""
 
-from cellscape.spatial.annotation import project_labelme_masks_to_obs
+from cellscape.spatial.annotation import (
+    project_labelme_masks_to_obs,
+    update_obs_columns_from_dataframe,
+)
 from cellscape.spatial.plots import (
     highlight_and_expression_grid,
     highlight_clusters_panels,
@@ -16,4 +19,5 @@ __all__ = [
     "project_labelme_masks_to_obs",
     "spatial_expression_panels",
     "spatial_scatter",
+    "update_obs_columns_from_dataframe",
 ]
