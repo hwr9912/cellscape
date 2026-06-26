@@ -84,8 +84,9 @@ def _normalize_bool_mode_values(
     update_kind = _column_arg_kind(update_values, name="update_values")
     if match_kind != expected_kind or update_kind != expected_kind:
         raise ValueError(
-            "bool 更新中 `source_columns`, `target_columns`, `match_values` "
-            "和 `update_values` 必须同时是字符串, 或同时是等长列表"
+            "bool 更新中 `source_columns`, `target_columns`, `match_columns`, "
+            "`match_values` 和 `update_values` 必须同时是字符串, "
+            "或同时是等长列表"
         )
 
     normalized_match_values = _as_column_tuple(match_values, name="match_values")
@@ -95,10 +96,38 @@ def _normalize_bool_mode_values(
         or len(normalized_update_values) != expected_length
     ):
         raise ValueError(
-            "bool 更新中 `source_columns`, `target_columns`, `match_values` "
-            "和 `update_values` 必须同时是字符串, 或同时是等长列表"
+            "bool 更新中 `source_columns`, `target_columns`, `match_columns`, "
+            "`match_values` 和 `update_values` 必须同时是字符串, "
+            "或同时是等长列表"
         )
     return normalized_match_values, normalized_update_values
+
+
+def _normalize_bool_match_columns(
+    match_columns: str | Sequence[str],
+    *,
+    expected_kind: str,
+    expected_length: int,
+) -> tuple[str, ...]:
+    """标准化 bool 更新的匹配列, 并校验其形态和长度。"""
+    match_columns_kind = _column_arg_kind(match_columns, name="match_columns")
+    if match_columns_kind != expected_kind:
+        raise ValueError(
+            "bool 更新中 `source_columns`, `target_columns`, `match_columns`, "
+            "`match_values` 和 `update_values` 必须同时是字符串, "
+            "或同时是等长列表"
+        )
+    normalized_match_columns = _as_column_tuple(
+        match_columns,
+        name="match_columns",
+    )
+    if len(normalized_match_columns) != expected_length:
+        raise ValueError(
+            "bool 更新中 `source_columns`, `target_columns`, `match_columns`, "
+            "`match_values` 和 `update_values` 必须同时是字符串, "
+            "或同时是等长列表"
+        )
+    return normalized_match_columns
 
 
 def _duplicated_key_preview(frame: pd.DataFrame, columns: Sequence[str]) -> list[Any]:
@@ -153,6 +182,7 @@ def update_obs_from_df(
     """
     使用外部 dataframe 按索引列局部更新 `adata.obs` 中的列。
 
+    该函数主要是为了协助空转细分亚脑区注释后合并注释的问题创建的。
     函数会根据 `index_columns` 在 `df` 和 `adata.obs` 之间匹配行。
     能在 `df` 中找到对应索引的 `adata.obs` 行会被更新;
     找不到对应索引的行保持不变。
@@ -168,6 +198,15 @@ def update_obs_from_df(
     - `check_adata_index_unique: bool = True` 是否把 `adata.obs`
       索引不唯一作为错误; 为 False 时仍检查, 但只发出 warning
     - `inplace: bool = True` 是否原位修改输入 `adata`
+
+    ### Example
+    import cellscape.spatial as spt
+
+    spt.update_obs_from_df(adata=adata_region_uncertain,
+                           df=region_initial_annotated,
+                           index_columns=["x", "y", "library"],
+                           source_columns="sub_region",
+                           target_columns="sub_region",)
     """
     # 统一把单个索引列名和多个索引列名都转换成 tuple, 后续逻辑就可以
     # 用同一种方式处理单列键和多列组合键。
@@ -270,6 +309,7 @@ def update_obs_from_bool_df(
     index_columns: str | Sequence[str],
     source_columns: str | Sequence[str],
     target_columns: str | Sequence[str],
+    match_columns: str | Sequence[str],
     match_values: str | Sequence[str],
     update_values: str | Sequence[str],
     *,
@@ -279,13 +319,15 @@ def update_obs_from_bool_df(
     """
     使用 dataframe 中的 bool 列按条件更新 `adata.obs` 中的列。
 
+    这个函数主要目的是协助 spatialdata-napari 包下的手动注释功能, 参见
+    https://spatialdata.scverse.org/projects/napari/en/latest/notebooks/scatterwidget_annotation.html
     函数会先根据 `index_columns` 在 `df` 和 `adata.obs` 之间匹配行。
     对匹配行, 只有当 `df[source_columns]` 为 True, 且
-    `adata.obs[target_columns]` 当前值等于 `match_values` 时, 才把目标列
+    `adata.obs[match_columns]` 当前值等于 `match_values` 时, 才把目标列
     写为 `update_values`。
 
-    `source_columns`, `target_columns`, `match_values`, `update_values` 必须
-    同时是字符串, 或同时是等长字符串列表。
+    `source_columns`, `target_columns`, `match_columns`, `match_values`,
+    `update_values` 必须同时是字符串, 或同时是等长字符串列表。
 
     ### Parameters
     - `adata: Any` 原始 AnnData 对象
@@ -293,20 +335,39 @@ def update_obs_from_bool_df(
     - `index_columns: str | Sequence[str]` 用于匹配的索引列名
     - `source_columns: str | Sequence[str]` `df` 中作为更新开关的 bool 列名
     - `target_columns: str | Sequence[str]` `adata.obs` 中被更新的列名
-    - `match_values: str | Sequence[str]` 目标列当前需要匹配的值
+    - `match_columns: str | Sequence[str]` `adata.obs` 中用于匹配当前值的列名
+    - `match_values: str | Sequence[str]` 匹配列当前需要匹配的值
     - `update_values: str | Sequence[str]` 条件满足时写入目标列的值
     - `check_adata_index_unique: bool = True` 是否把 `adata.obs`
       索引不唯一作为错误; 为 False 时仍检查, 但只发出 warning
     - `inplace: bool = True` 是否原位修改输入 `adata`
+
+    ### Example
+    import cellscape.spatial as spt
+
+    spt.update_obs_from_bool_df(adata=adata_region_uncertain,
+                                df=region_3d,
+                                index_columns=["x", "y", "library"],
+                                source_columns=["ctx_12&6_layer5", "ctx_12&6_layer5", "ctx_6_CLA"],
+                                target_columns=["sub_region", "sub_region", "sub_region",],
+                                match_columns=[cluster_key_chosen]*3,
+                                match_values=["6", "12", "6"],
+                                update_values=["layer5", "layer5", "CLA"]
+                                )
     """
     # 统一索引列形态, 让单列键和多列组合键共用后续匹配逻辑。
     index_columns = _as_column_tuple(index_columns, name="index_columns")
 
-    # bool 更新涉及四组一一对应的参数: df bool 来源列、obs 目标列、
-    # 目标列当前匹配值、条件满足后的写入值。这里先校验列参数同形态等长。
+    # bool 更新涉及五组一一对应的参数: df bool 来源列、obs 目标列、
+    # obs 匹配列、匹配值、条件满足后的写入值。这里先校验它们同形态等长。
     source_columns, target_columns, column_kind = _normalize_paired_columns(
         source_columns,
         target_columns,
+    )
+    match_columns = _normalize_bool_match_columns(
+        match_columns,
+        expected_kind=column_kind,
+        expected_length=len(source_columns),
     )
     match_values, update_values = _normalize_bool_mode_values(
         match_values,
@@ -342,6 +403,13 @@ def update_obs_from_bool_df(
     ]
     if missing_obs_index_columns:
         raise KeyError(f"adata.obs 缺少索引列: {missing_obs_index_columns}")
+
+    # 匹配列必须已存在于 adata.obs, 因为它们提供“当前状态是否允许更新”的判断。
+    missing_match_columns = [
+        column for column in match_columns if column not in adata.obs
+    ]
+    if missing_match_columns:
+        raise KeyError(f"adata.obs 缺少匹配列: {missing_match_columns}")
 
     # df 是更新来源, 每个索引键只能出现一次, 否则无法确定采用哪一行的 bool 值。
     _ensure_unique_keys(df, index_columns, frame_name="df")
@@ -385,10 +453,10 @@ def update_obs_from_bool_df(
             f"adata.obs 中没有任何行能根据索引列 {list(index_columns)!r} 匹配到 df"
         )
 
-    # 逐组处理 bool 来源列、目标列、匹配值和写入值。
+    # 逐组处理 bool 来源列、目标列、匹配列、匹配值和写入值。
     matched_positions = np.flatnonzero(matched)
-    for position, (source_column, target_column) in enumerate(
-        zip(source_columns, target_columns, strict=True)
+    for position, (source_column, target_column, match_column) in enumerate(
+        zip(source_columns, target_columns, match_columns, strict=True)
     ):
         # 按 obs 匹配行顺序取出 df 中的 bool 开关; 缺失值按 False 处理。
         values_by_key = pd.Series(df[source_column].to_numpy(), index=df_keys)
@@ -396,8 +464,8 @@ def update_obs_from_bool_df(
             "boolean"
         ).fillna(False)
 
-        # 同时要求目标列当前值等于 match_values[position]。
-        target_matches = target.obs.loc[matched, target_column].eq(
+        # 同时要求匹配列当前值等于 match_values[position]。
+        target_matches = target.obs.loc[matched, match_column].eq(
             match_values[position]
         )
 

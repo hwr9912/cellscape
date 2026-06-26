@@ -196,7 +196,7 @@ spt.update_obs_from_df(
 )
 ```
 
-如果外部 dataframe 中的列是 bool 标记，可以只在 bool 为 True 且目标列当前值匹配时更新：
+如果外部 dataframe 中的列是 bool 标记，可以只在 bool 为 True 且匹配列当前值匹配时更新：
 
 ```python
 spt.update_obs_from_bool_df(
@@ -205,10 +205,15 @@ spt.update_obs_from_bool_df(
     index_columns="cell_id",
     source_columns="in_tumor",
     target_columns="region",
+    match_columns="annotation_status",
     match_values="unassigned",
     update_values="tumor",
 )
 ```
+
+这里 `source_columns` 来自 `df`，必须是 bool 类型。`match_columns` 来自
+`adata.obs`，用于判断当前状态；`target_columns` 也是 `adata.obs` 中的列，
+用于写入新值。
 
 ## 在线文档
 

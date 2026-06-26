@@ -13,6 +13,47 @@ import cellscape.spatial as spt
 - `spt.update_obs_from_df(...)`
 - `spt.update_obs_from_bool_df(...)`
 
+### obs 注释更新
+
+```python
+spt.update_obs_from_df(
+    adata,
+    df,
+    index_columns,
+    source_columns,
+    target_columns,
+    check_adata_index_unique=True,
+    inplace=True,
+)
+```
+
+`update_obs_from_df` 根据 `index_columns` 匹配 `df` 和 `adata.obs` 的行，并把
+`df[source_columns]` 写入 `adata.obs[target_columns]`。`source_columns` 和
+`target_columns` 必须同时是字符串，或同时是等长列表。
+
+```python
+spt.update_obs_from_bool_df(
+    adata,
+    df,
+    index_columns,
+    source_columns,
+    target_columns,
+    match_columns,
+    match_values,
+    update_values,
+    check_adata_index_unique=True,
+    inplace=True,
+)
+```
+
+`update_obs_from_bool_df` 同样先按 `index_columns` 匹配行。只有当
+`df[source_columns]` 为 True，且 `adata.obs[match_columns]` 当前值等于
+`match_values` 时，才把 `adata.obs[target_columns]` 写为 `update_values`。
+
+`source_columns`、`target_columns`、`match_columns`、`match_values` 和
+`update_values` 必须同时是字符串，或同时是等长列表；`df[source_columns]`
+必须是 bool 类型。
+
 ## 单细胞
 
 ```python

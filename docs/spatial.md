@@ -80,6 +80,7 @@ fig, axes = spt.highlight_and_expression_grid(
 
 ## obs 注释更新
 
+空转细分亚脑区注释后合并注释常常涉及到多个表的相互merge, 非常复杂, 所以包装成一个函数
 `update_obs_from_df` 用于把外部 dataframe 中整理好的列写回 `adata.obs`。函数会根据
 `index_columns` 匹配 `df` 和 `adata.obs` 的行，只更新匹配成功的 obs 行。
 
@@ -96,8 +97,9 @@ spt.update_obs_from_df(
 `source_columns` 和 `target_columns` 必须同时是字符串，或同时是等长字符串列表。
 如果 `target_columns` 中的列还不存在，函数会先创建 NA 列，再写入匹配行。
 
-`update_obs_from_bool_df` 用于根据 bool 标记列做条件更新。只有当 `df[source_columns]`
-为 True，且 `adata.obs[target_columns]` 当前值等于 `match_values` 时，才写入
+`update_obs_from_bool_df` 这个函数主要目的是协助 spatialdata-napari 包下的手动注释功能, 参见https://spatialdata.scverse.org/projects/napari/en/latest/notebooks/scatterwidget_annotation.html,
+其作用为根据 bool 标记列做条件更新。只有当 `df[source_columns]`
+为 True，且 `adata.obs[match_columns]` 当前值等于 `match_values` 时，才写入
 `update_values`。
 
 ```python
@@ -107,10 +109,13 @@ spt.update_obs_from_bool_df(
     index_columns="cell_id",
     source_columns="in_tumor",
     target_columns="region",
+    match_columns="annotation_status",
     match_values="unassigned",
     update_values="tumor",
 )
 ```
 
-bool 更新中，`source_columns`、`target_columns`、`match_values` 和 `update_values`
-必须同时是字符串，或同时是等长列表；`df[source_columns]` 必须是 bool 类型。
+bool 更新中，`source_columns`、`target_columns`、`match_columns`、`match_values`
+和 `update_values` 必须同时是字符串，或同时是等长列表；
+`df[source_columns]` 必须是 bool 类型。`match_columns` 必须已经存在于
+`adata.obs`；如果 `target_columns` 不存在，函数会创建目标列后再写入满足条件的行。

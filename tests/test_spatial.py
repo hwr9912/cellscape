@@ -174,14 +174,16 @@ def test_update_obs_from_df_can_return_copy() -> None:
     assert result.obs.loc[0, "region"] == "new"
 
 
-def test_update_obs_from_bool_df_updates_true_matches_only() -> None:
-    """bool 更新只在来源列为 True 且目标列当前值匹配时写入新值。"""
+def test_update_obs_from_bool_df_updates_true_match_columns_only() -> None:
+    """bool 更新只在来源列为 True 且匹配列当前值匹配时写入新值。"""
     adata = _MiniAnnData(
         pd.DataFrame(
             {
                 "cell_id": ["c1", "c2", "c3", "c4"],
+                "status": ["unassigned", "unassigned", "reviewed", "unassigned"],
+                "state_status": ["pending", "pending", "pending", "done"],
                 "region": ["old", "old", "keep", "old"],
-                "state": ["low", "low", "low", "high"],
+                "state": ["low", "low", "low", "low"],
             }
         )
     )
@@ -199,12 +201,13 @@ def test_update_obs_from_bool_df_updates_true_matches_only() -> None:
         index_columns="cell_id",
         source_columns=["region_flag", "state_flag"],
         target_columns=["region", "state"],
-        match_values=["old", "low"],
+        match_columns=["status", "state_status"],
+        match_values=["unassigned", "pending"],
         update_values=["new", "high"],
     )
 
     assert adata.obs["region"].tolist() == ["new", "old", "keep", "new"]
-    assert adata.obs["state"].tolist() == ["low", "high", "high", "high"]
+    assert adata.obs["state"].tolist() == ["low", "high", "high", "low"]
 
 
 def test_update_obs_from_bool_df_requires_bool_source() -> None:
@@ -219,14 +222,17 @@ def test_update_obs_from_bool_df_requires_bool_source() -> None:
             index_columns="cell_id",
             source_columns="region_flag",
             target_columns="region",
+            match_columns="status",
             match_values="old",
             update_values="new",
         )
 
 
 def test_update_obs_from_bool_df_requires_matching_shapes() -> None:
-    """来源列、目标列以及 bool 参数必须同时为字符串或等长列表。"""
-    adata = _MiniAnnData(pd.DataFrame({"cell_id": ["c1"], "region": ["old"]}))
+    """来源列、目标列、匹配列以及 bool 参数必须同时为字符串或等长列表。"""
+    adata = _MiniAnnData(
+        pd.DataFrame({"cell_id": ["c1"], "status": ["old"], "region": ["old"]})
+    )
     df = pd.DataFrame({"cell_id": ["c1"], "region_flag": [True]})
 
     with pytest.raises(ValueError, match="source_columns.*target_columns"):
@@ -236,8 +242,21 @@ def test_update_obs_from_bool_df_requires_matching_shapes() -> None:
             index_columns="cell_id",
             source_columns="region_flag",
             target_columns=["region"],
+            match_columns="status",
             match_values="old",
             update_values="new",
+        )
+
+    with pytest.raises(ValueError, match="match_columns.*等长列表"):
+        update_obs_from_bool_df(
+            adata,
+            df,
+            index_columns="cell_id",
+            source_columns=["region_flag"],
+            target_columns=["region"],
+            match_columns="status",
+            match_values=["old"],
+            update_values=["new"],
         )
 
     with pytest.raises(ValueError, match="bool 更新.*等长列表"):
@@ -247,6 +266,25 @@ def test_update_obs_from_bool_df_requires_matching_shapes() -> None:
             index_columns="cell_id",
             source_columns=["region_flag"],
             target_columns=["region"],
+            match_columns=["status"],
+            match_values="old",
+            update_values="new",
+        )
+
+
+def test_update_obs_from_bool_df_requires_existing_match_columns() -> None:
+    """bool 更新要求匹配列已存在于 adata.obs。"""
+    adata = _MiniAnnData(pd.DataFrame({"cell_id": ["c1"], "region": ["old"]}))
+    df = pd.DataFrame({"cell_id": ["c1"], "region_flag": [True]})
+
+    with pytest.raises(KeyError, match="缺少匹配列"):
+        update_obs_from_bool_df(
+            adata,
+            df,
+            index_columns="cell_id",
+            source_columns="region_flag",
+            target_columns="region",
+            match_columns="status",
             match_values="old",
             update_values="new",
         )

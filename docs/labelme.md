@@ -77,7 +77,8 @@ adata.obs["in_tumor"]
 ```
 
 如果后续想把这些 bool 列转成已有注释列中的区域标签，可以使用
-`update_obs_from_bool_df`：
+`update_obs_from_bool_df`。下面示例假设 `adata.obs["annotation_status"]`
+已经记录了哪些细胞仍处于 `"unassigned"` 状态：
 
 ```python
 spt.update_obs_from_bool_df(
@@ -86,6 +87,7 @@ spt.update_obs_from_bool_df(
     index_columns="cell_id",
     source_columns="in_tumor",
     target_columns="region",
+    match_columns="annotation_status",
     match_values="unassigned",
     update_values="tumor",
 )

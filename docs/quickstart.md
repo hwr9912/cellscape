@@ -54,7 +54,7 @@ spt.update_obs_from_df(
 )
 ```
 
-如果 `df` 中保存的是 bool 标记列，可以只更新目标列当前值匹配的行：
+如果 `df` 中保存的是 bool 标记列，可以只更新匹配列当前值匹配的行：
 
 ```python
 spt.update_obs_from_bool_df(
@@ -63,10 +63,14 @@ spt.update_obs_from_bool_df(
     index_columns="cell_id",
     source_columns="in_tumor",
     target_columns="region",
+    match_columns="annotation_status",
     match_values="unassigned",
     update_values="tumor",
 )
 ```
+
+`source_columns` 来自 `df`，必须是 bool 类型；`match_columns` 来自 `adata.obs`，
+用于判断当前值是否允许更新；`target_columns` 是最终写入的 `adata.obs` 列。
 
 ## UMAP 表达与分类高亮
 
