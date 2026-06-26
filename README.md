@@ -179,30 +179,11 @@ adata = spt.project_labelme_masks_to_obs(
 )
 ```
 
-## 文档托管到 GitHub Pages
+## 在线文档
 
-本仓库已经包含 `mkdocs.yml` 和 `docs/` 目录，可以用 MkDocs 生成中文文档站点。
+中文文档已托管在 GitHub Pages：
 
-本地预览：
-
-```bash
-pip install mkdocs mkdocs-material
-mkdocs serve
-```
-
-构建静态站点：
-
-```bash
-mkdocs build
-```
-
-部署到 GitHub Pages：
-
-```bash
-mkdocs gh-deploy
-```
-
-也可以在 GitHub 仓库的 **Settings -> Pages** 中配置 GitHub Actions 自动部署。
+https://hwr9912.github.io/cellscape/
 
 ## 开发与测试
 
