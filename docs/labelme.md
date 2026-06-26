@@ -76,6 +76,21 @@ adata.obs["in__background_"]
 adata.obs["in_tumor"]
 ```
 
+如果后续想把这些 bool 列转成已有注释列中的区域标签，可以使用
+`update_obs_from_bool_df`：
+
+```python
+spt.update_obs_from_bool_df(
+    adata,
+    adata.obs[["cell_id", "in_tumor"]],
+    index_columns="cell_id",
+    source_columns="in_tumor",
+    target_columns="region",
+    match_values="unassigned",
+    update_values="tumor",
+)
+```
+
 使用 PNG mask 目录，并合并写入单列：
 
 ```python

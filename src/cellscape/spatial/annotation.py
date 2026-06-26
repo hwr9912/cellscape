@@ -29,6 +29,78 @@ def _as_column_tuple(columns: str | Sequence[str], *, name: str) -> tuple[str, .
     return normalized
 
 
+def _column_arg_kind(value: str | Sequence[str], *, name: str) -> str:
+    """返回列参数是单个字符串还是列表式参数。"""
+    if isinstance(value, str):
+        return "str"
+    if isinstance(value, Sequence):
+        return "sequence"
+    raise ValueError(f"`{name}` 必须是非空字符串或非空字符串列表")
+
+
+def _normalize_paired_columns(
+    source_columns: str | Sequence[str],
+    target_columns: str | Sequence[str],
+) -> tuple[tuple[str, ...], tuple[str, ...], str]:
+    """标准化来源列和目标列, 并要求二者形态一致。"""
+    source_kind = _column_arg_kind(source_columns, name="source_columns")
+    target_kind = _column_arg_kind(target_columns, name="target_columns")
+    if source_kind != target_kind:
+        raise ValueError(
+            "`source_columns` 和 `target_columns` 必须同时是字符串, "
+            "或同时是等长字符串列表"
+        )
+
+    normalized_source_columns = _as_column_tuple(
+        source_columns,
+        name="source_columns",
+    )
+    normalized_target_columns = _as_column_tuple(
+        target_columns,
+        name="target_columns",
+    )
+    if len(normalized_source_columns) != len(normalized_target_columns):
+        raise ValueError(
+            "`source_columns` 和 `target_columns` 必须同时是字符串, "
+            "或同时是等长字符串列表"
+        )
+    return normalized_source_columns, normalized_target_columns, source_kind
+
+
+def _normalize_bool_mode_values(
+    match_values: str | Sequence[str] | None,
+    update_values: str | Sequence[str] | None,
+    *,
+    expected_kind: str,
+    expected_length: int,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """标准化 bool 更新的匹配值和写入值。"""
+    if match_values is None:
+        raise ValueError("`match_values` 是 bool 更新的必需参数")
+    if update_values is None:
+        raise ValueError("`update_values` 是 bool 更新的必需参数")
+
+    match_kind = _column_arg_kind(match_values, name="match_values")
+    update_kind = _column_arg_kind(update_values, name="update_values")
+    if match_kind != expected_kind or update_kind != expected_kind:
+        raise ValueError(
+            "bool 更新中 `source_columns`, `target_columns`, `match_values` "
+            "和 `update_values` 必须同时是字符串, 或同时是等长列表"
+        )
+
+    normalized_match_values = _as_column_tuple(match_values, name="match_values")
+    normalized_update_values = _as_column_tuple(update_values, name="update_values")
+    if (
+        len(normalized_match_values) != expected_length
+        or len(normalized_update_values) != expected_length
+    ):
+        raise ValueError(
+            "bool 更新中 `source_columns`, `target_columns`, `match_values` "
+            "和 `update_values` 必须同时是字符串, 或同时是等长列表"
+        )
+    return normalized_match_values, normalized_update_values
+
+
 def _duplicated_key_preview(frame: pd.DataFrame, columns: Sequence[str]) -> list[Any]:
     """返回重复索引键的少量预览, 用于错误信息。"""
     duplicated = frame.loc[:, list(columns)].duplicated(keep=False)
@@ -68,12 +140,12 @@ def _ensure_assignable_categories(
         obs[column] = obs[column].cat.add_categories(missing)
 
 
-def update_obs_columns_from_dataframe(
+def update_obs_from_df(
     adata: Any,
     df: pd.DataFrame,
     index_columns: str | Sequence[str],
-    replace_columns: str | Sequence[str],
-    replaced_columns: str | Sequence[str],
+    source_columns: str | Sequence[str],
+    target_columns: str | Sequence[str],
     *,
     check_adata_index_unique: bool = True,
     inplace: bool = True,
@@ -84,43 +156,53 @@ def update_obs_columns_from_dataframe(
     函数会根据 `index_columns` 在 `df` 和 `adata.obs` 之间匹配行。
     能在 `df` 中找到对应索引的 `adata.obs` 行会被更新;
     找不到对应索引的行保持不变。
-    `replace_columns` 是 `df` 中提供新值的列, `replaced_columns` 是
-    `adata.obs` 中被写入的目标列, 二者必须一一对应。
+    `source_columns` 是 `df` 中提供新值的列, `target_columns` 是
+    `adata.obs` 中被写入的目标列, 二者必须同时是字符串或同时是等长列表。
 
     ### Parameters
     - `adata: Any` 原始 AnnData 对象
     - `df: pd.DataFrame` 包含索引列和替换列的 dataframe
     - `index_columns: str | Sequence[str]` 用于匹配的索引列名
-    - `replace_columns: str | Sequence[str]` `df` 中提供新值的列名
-    - `replaced_columns: str | Sequence[str]` `adata.obs` 中被替换的列名
+    - `source_columns: str | Sequence[str]` `df` 中提供新值的列名
+    - `target_columns: str | Sequence[str]` `adata.obs` 中被更新的列名
     - `check_adata_index_unique: bool = True` 是否把 `adata.obs`
       索引不唯一作为错误; 为 False 时仍检查, 但只发出 warning
     - `inplace: bool = True` 是否原位修改输入 `adata`
     """
+    # 统一把单个索引列名和多个索引列名都转换成 tuple, 后续逻辑就可以
+    # 用同一种方式处理单列键和多列组合键。
     index_columns = _as_column_tuple(index_columns, name="index_columns")
-    replace_columns = _as_column_tuple(replace_columns, name="replace_columns")
-    replaced_columns = _as_column_tuple(replaced_columns, name="replaced_columns")
-    if len(replace_columns) != len(replaced_columns):
-        raise ValueError(
-            "`replace_columns` 和 `replaced_columns` 的长度必须一致"
-        )
 
+    # 标准化来源列和目标列, 并要求二者同形态等长, 确保每个 df 来源列
+    # 都能精确对应一个 adata.obs 目标列。
+    source_columns, target_columns, _ = _normalize_paired_columns(
+        source_columns,
+        target_columns,
+    )
+
+    # df 必须同时包含用于匹配行的索引列, 以及提供新值的来源列。
+    # 索引列缺失时无法定位行; 来源列缺失时无法生成写入值。
     missing_df_index_columns = [column for column in index_columns if column not in df]
     if missing_df_index_columns:
         raise KeyError(f"df 缺少索引列: {missing_df_index_columns}")
 
-    missing_replace_columns = [column for column in replace_columns if column not in df]
-    if missing_replace_columns:
-        raise KeyError(f"df 缺少替换列: {missing_replace_columns}")
+    missing_source_columns = [column for column in source_columns if column not in df]
+    if missing_source_columns:
+        raise KeyError(f"df 缺少来源列: {missing_source_columns}")
 
+    # adata.obs 也必须有同名索引列, 否则无法和 df 建立行级对应关系。
     missing_obs_index_columns = [
         column for column in index_columns if column not in adata.obs
     ]
     if missing_obs_index_columns:
         raise KeyError(f"adata.obs 缺少索引列: {missing_obs_index_columns}")
 
+    # df 作为更新来源, 每个索引键只能出现一次; 否则同一个 obs 行会对应多条
+    # 来源记录, 无法确定应该采用哪一个值。
     _ensure_unique_keys(df, index_columns, frame_name="df")
 
+    # adata.obs 中重复索引键的处理由 check_adata_index_unique 控制。严格模式
+    # 直接报错; 宽松模式允许一条 df 记录更新多个 obs 行, 但发出 warning。
     duplicated_obs_keys = adata.obs.loc[:, list(index_columns)].duplicated(keep=False)
     if duplicated_obs_keys.any():
         preview = _duplicated_key_preview(adata.obs, index_columns)
@@ -132,20 +214,26 @@ def update_obs_columns_from_dataframe(
             raise ValueError(message)
         warnings.warn(message, UserWarning, stacklevel=2)
 
+    # inplace=True 时直接修改传入对象; inplace=False 时先复制, 最后返回副本。
     target = adata if inplace else adata.copy()
-    missing_replaced_columns = [
-        column for column in replaced_columns if column not in target.obs
+
+    # 如果目标列不存在, 先创建 NA 列。这样匹配行可以写入 df 的新值,
+    # 未匹配行保持 NA。
+    missing_target_columns = [
+        column for column in target_columns if column not in target.obs
     ]
-    for column in missing_replaced_columns:
+    for column in missing_target_columns:
         target.obs.loc[:, column] = pd.NA
-    if missing_replaced_columns:
+    if missing_target_columns:
         warnings.warn(
-            "adata.obs 缺少被替换列, 已创建并填充为 NA: "
-            f"{missing_replaced_columns}",
+            "adata.obs 缺少目标列, 已创建并填充为 NA: "
+            f"{missing_target_columns}",
             UserWarning,
             stacklevel=2,
         )
 
+    # 用 MultiIndex 表示单列或多列组合键, 这样单索引和复合索引可以共享同一套
+    # 匹配逻辑。matched 是一个与 adata.obs 等长的布尔数组。
     df_keys = pd.MultiIndex.from_frame(df.loc[:, list(index_columns)])
     obs_keys = pd.MultiIndex.from_frame(target.obs.loc[:, list(index_columns)])
     matched = obs_keys.isin(df_keys)
@@ -154,16 +242,185 @@ def update_obs_columns_from_dataframe(
             f"adata.obs 中没有任何行能根据索引列 {list(index_columns)!r} 匹配到 df"
         )
 
-    for replace_column, replaced_column in zip(
-        replace_columns,
-        replaced_columns,
+    # 逐对处理来源列和目标列: 对所有匹配行, 直接用 df 来源列的值覆盖
+    # adata.obs 的目标列。
+    for source_column, target_column in zip(
+        source_columns,
+        target_columns,
         strict=True,
     ):
-        values_by_key = pd.Series(df[replace_column].to_numpy(), index=df_keys)
+        # 把 df 的来源列转成以 df_keys 为索引的 Series, 后续通过 reindex 按
+        # obs_keys 顺序取值, 保证写入值和 adata.obs 的匹配行顺序一致。
+        values_by_key = pd.Series(df[source_column].to_numpy(), index=df_keys)
         new_values = values_by_key.reindex(obs_keys[matched])
-        _ensure_assignable_categories(target.obs, replaced_column, new_values)
-        target.obs.loc[matched, replaced_column] = new_values.to_numpy()
 
+        # 如果目标列是 category, 先补齐新类别, 避免 pandas 赋值时报错。
+        _ensure_assignable_categories(target.obs, target_column, new_values)
+        target.obs.loc[matched, target_column] = new_values.to_numpy()
+
+    # 原位模式遵循 pandas/anndata 常见习惯返回 None; 非原位模式返回更新副本。
+    if inplace:
+        return None
+    return target
+
+
+def update_obs_from_bool_df(
+    adata: Any,
+    df: pd.DataFrame,
+    index_columns: str | Sequence[str],
+    source_columns: str | Sequence[str],
+    target_columns: str | Sequence[str],
+    match_values: str | Sequence[str],
+    update_values: str | Sequence[str],
+    *,
+    check_adata_index_unique: bool = True,
+    inplace: bool = True,
+) -> Any | None:
+    """
+    使用 dataframe 中的 bool 列按条件更新 `adata.obs` 中的列。
+
+    函数会先根据 `index_columns` 在 `df` 和 `adata.obs` 之间匹配行。
+    对匹配行, 只有当 `df[source_columns]` 为 True, 且
+    `adata.obs[target_columns]` 当前值等于 `match_values` 时, 才把目标列
+    写为 `update_values`。
+
+    `source_columns`, `target_columns`, `match_values`, `update_values` 必须
+    同时是字符串, 或同时是等长字符串列表。
+
+    ### Parameters
+    - `adata: Any` 原始 AnnData 对象
+    - `df: pd.DataFrame` 包含索引列和 bool 来源列的 dataframe
+    - `index_columns: str | Sequence[str]` 用于匹配的索引列名
+    - `source_columns: str | Sequence[str]` `df` 中作为更新开关的 bool 列名
+    - `target_columns: str | Sequence[str]` `adata.obs` 中被更新的列名
+    - `match_values: str | Sequence[str]` 目标列当前需要匹配的值
+    - `update_values: str | Sequence[str]` 条件满足时写入目标列的值
+    - `check_adata_index_unique: bool = True` 是否把 `adata.obs`
+      索引不唯一作为错误; 为 False 时仍检查, 但只发出 warning
+    - `inplace: bool = True` 是否原位修改输入 `adata`
+    """
+    # 统一索引列形态, 让单列键和多列组合键共用后续匹配逻辑。
+    index_columns = _as_column_tuple(index_columns, name="index_columns")
+
+    # bool 更新涉及四组一一对应的参数: df bool 来源列、obs 目标列、
+    # 目标列当前匹配值、条件满足后的写入值。这里先校验列参数同形态等长。
+    source_columns, target_columns, column_kind = _normalize_paired_columns(
+        source_columns,
+        target_columns,
+    )
+    match_values, update_values = _normalize_bool_mode_values(
+        match_values,
+        update_values,
+        expected_kind=column_kind,
+        expected_length=len(source_columns),
+    )
+
+    # df 必须包含索引列和 bool 来源列; 来源列必须是真正的 bool dtype,
+    # 因为这些列会被解释为“是否允许更新”的开关。
+    missing_df_index_columns = [column for column in index_columns if column not in df]
+    if missing_df_index_columns:
+        raise KeyError(f"df 缺少索引列: {missing_df_index_columns}")
+
+    missing_source_columns = [column for column in source_columns if column not in df]
+    if missing_source_columns:
+        raise KeyError(f"df 缺少来源列: {missing_source_columns}")
+
+    non_bool_source_columns = [
+        column
+        for column in source_columns
+        if not pd.api.types.is_bool_dtype(df[column].dtype)
+    ]
+    if non_bool_source_columns:
+        raise TypeError(
+            "bool 更新要求 df 中的来源列为 bool 类型: "
+            f"{non_bool_source_columns}"
+        )
+
+    # adata.obs 必须包含索引列, 否则无法和 df 逐行对齐。
+    missing_obs_index_columns = [
+        column for column in index_columns if column not in adata.obs
+    ]
+    if missing_obs_index_columns:
+        raise KeyError(f"adata.obs 缺少索引列: {missing_obs_index_columns}")
+
+    # df 是更新来源, 每个索引键只能出现一次, 否则无法确定采用哪一行的 bool 值。
+    _ensure_unique_keys(df, index_columns, frame_name="df")
+
+    # obs 重复键默认视为错误; 如果用户显式允许, 则一条 df 记录可以作用到
+    # 多个 obs 行, 但保留 warning 提醒。
+    duplicated_obs_keys = adata.obs.loc[:, list(index_columns)].duplicated(keep=False)
+    if duplicated_obs_keys.any():
+        preview = _duplicated_key_preview(adata.obs, index_columns)
+        message = (
+            f"adata.obs 中索引列 {list(index_columns)!r} 对应的索引不唯一; "
+            f"重复示例: {preview}"
+        )
+        if check_adata_index_unique:
+            raise ValueError(message)
+        warnings.warn(message, UserWarning, stacklevel=2)
+
+    # 根据 inplace 决定是直接修改原对象, 还是创建副本后返回。
+    target = adata if inplace else adata.copy()
+
+    # 如果目标列不存在, 先创建 NA 列, 后续只会把满足 bool 条件的行写入新值。
+    missing_target_columns = [
+        column for column in target_columns if column not in target.obs
+    ]
+    for column in missing_target_columns:
+        target.obs.loc[:, column] = pd.NA
+    if missing_target_columns:
+        warnings.warn(
+            "adata.obs 缺少目标列, 已创建并填充为 NA: "
+            f"{missing_target_columns}",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    # 用 MultiIndex 表示单列或多列组合键, 得到与 adata.obs 等长的匹配掩码。
+    df_keys = pd.MultiIndex.from_frame(df.loc[:, list(index_columns)])
+    obs_keys = pd.MultiIndex.from_frame(target.obs.loc[:, list(index_columns)])
+    matched = obs_keys.isin(df_keys)
+    if not matched.any():
+        raise ValueError(
+            f"adata.obs 中没有任何行能根据索引列 {list(index_columns)!r} 匹配到 df"
+        )
+
+    # 逐组处理 bool 来源列、目标列、匹配值和写入值。
+    matched_positions = np.flatnonzero(matched)
+    for position, (source_column, target_column) in enumerate(
+        zip(source_columns, target_columns, strict=True)
+    ):
+        # 按 obs 匹配行顺序取出 df 中的 bool 开关; 缺失值按 False 处理。
+        values_by_key = pd.Series(df[source_column].to_numpy(), index=df_keys)
+        source_flags = values_by_key.reindex(obs_keys[matched]).astype(
+            "boolean"
+        ).fillna(False)
+
+        # 同时要求目标列当前值等于 match_values[position]。
+        target_matches = target.obs.loc[matched, target_column].eq(
+            match_values[position]
+        )
+
+        # 用位置索引写入, 避免 obs index 有重复时误更新同名行。
+        rows_to_update = matched_positions[
+            source_flags.to_numpy(dtype=bool) & target_matches.to_numpy(dtype=bool)
+        ]
+        if len(rows_to_update) == 0:
+            continue
+
+        # 兼容 category 目标列: 写入前先补齐新类别。
+        update_value = update_values[position]
+        _ensure_assignable_categories(
+            target.obs,
+            target_column,
+            pd.Series([update_value]),
+        )
+        target.obs.iloc[
+            rows_to_update,
+            target.obs.columns.get_loc(target_column),
+        ] = update_value
+
+    # 原位模式遵循 pandas/anndata 常见习惯返回 None; 非原位模式返回更新副本。
     if inplace:
         return None
     return target

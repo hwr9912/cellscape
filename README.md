@@ -12,6 +12,7 @@ Hotspot 局部相关性热图，以及 labelme 区域注释到 mask / `adata.obs
 - 在 UMAP 上高亮某一类细胞，并查看该类中的基因表达
 - 绘制 Hotspot module 局部相关性聚类热图
 - 将 labelme 标注转换为 PNG / NPY mask，并投射回 `AnnData.obs`
+- 按外部 dataframe 更新 `adata.obs` 注释列，或用 bool 标记列做条件更新
 
 ## 安装
 
@@ -176,6 +177,36 @@ adata = spt.project_labelme_masks_to_obs(
     region_key="region",
     na_value="other",
     inplace=False,
+)
+```
+
+## obs 注释更新
+
+如果已经在外部 dataframe 中整理好新的注释值，可以按索引列更新 `adata.obs`：
+
+```python
+import cellscape.spatial as spt
+
+spt.update_obs_from_df(
+    adata,
+    df,
+    index_columns=["library", "cell_id"],
+    source_columns=["new_region", "new_score"],
+    target_columns=["region", "score"],
+)
+```
+
+如果外部 dataframe 中的列是 bool 标记，可以只在 bool 为 True 且目标列当前值匹配时更新：
+
+```python
+spt.update_obs_from_bool_df(
+    adata,
+    df,
+    index_columns="cell_id",
+    source_columns="in_tumor",
+    target_columns="region",
+    match_values="unassigned",
+    update_values="tumor",
 )
 ```
 

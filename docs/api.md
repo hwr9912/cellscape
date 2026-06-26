@@ -10,6 +10,8 @@ import cellscape.spatial as spt
 - `spt.highlight_clusters_panels(...)`
 - `spt.highlight_and_expression_grid(...)`
 - `spt.project_labelme_masks_to_obs(...)`
+- `spt.update_obs_from_df(...)`
+- `spt.update_obs_from_bool_df(...)`
 
 ## 单细胞
 

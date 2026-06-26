@@ -2,7 +2,8 @@
 
 from cellscape.spatial.annotation import (
     project_labelme_masks_to_obs,
-    update_obs_columns_from_dataframe,
+    update_obs_from_bool_df,
+    update_obs_from_df,
 )
 from cellscape.spatial.plots import (
     highlight_and_expression_grid,
@@ -19,5 +20,6 @@ __all__ = [
     "project_labelme_masks_to_obs",
     "spatial_expression_panels",
     "spatial_scatter",
-    "update_obs_columns_from_dataframe",
+    "update_obs_from_bool_df",
+    "update_obs_from_df",
 ]

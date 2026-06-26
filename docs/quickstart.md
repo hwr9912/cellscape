@@ -42,6 +42,32 @@ fig, axes = spt.highlight_clusters_panels(
 )
 ```
 
+## 更新 obs 注释
+
+```python
+spt.update_obs_from_df(
+    adata,
+    df,
+    index_columns=["library", "cell_id"],
+    source_columns="new_region",
+    target_columns="region",
+)
+```
+
+如果 `df` 中保存的是 bool 标记列，可以只更新目标列当前值匹配的行：
+
+```python
+spt.update_obs_from_bool_df(
+    adata,
+    df,
+    index_columns="cell_id",
+    source_columns="in_tumor",
+    target_columns="region",
+    match_values="unassigned",
+    update_values="tumor",
+)
+```
+
 ## UMAP 表达与分类高亮
 
 ```python

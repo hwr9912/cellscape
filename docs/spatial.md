@@ -77,3 +77,40 @@ fig, axes = spt.highlight_and_expression_grid(
 - 比较多个基因在多个切片中的空间分布。
 - 在最后一行保留细胞类型或 cluster 参照。
 - 使用 `crop_to_selected=True` 聚焦到指定类别所在区域。
+
+## obs 注释更新
+
+`update_obs_from_df` 用于把外部 dataframe 中整理好的列写回 `adata.obs`。函数会根据
+`index_columns` 匹配 `df` 和 `adata.obs` 的行，只更新匹配成功的 obs 行。
+
+```python
+spt.update_obs_from_df(
+    adata,
+    df,
+    index_columns=["library", "cell_id"],
+    source_columns=["new_region", "new_score"],
+    target_columns=["region", "score"],
+)
+```
+
+`source_columns` 和 `target_columns` 必须同时是字符串，或同时是等长字符串列表。
+如果 `target_columns` 中的列还不存在，函数会先创建 NA 列，再写入匹配行。
+
+`update_obs_from_bool_df` 用于根据 bool 标记列做条件更新。只有当 `df[source_columns]`
+为 True，且 `adata.obs[target_columns]` 当前值等于 `match_values` 时，才写入
+`update_values`。
+
+```python
+spt.update_obs_from_bool_df(
+    adata,
+    df,
+    index_columns="cell_id",
+    source_columns="in_tumor",
+    target_columns="region",
+    match_values="unassigned",
+    update_values="tumor",
+)
+```
+
+bool 更新中，`source_columns`、`target_columns`、`match_values` 和 `update_values`
+必须同时是字符串，或同时是等长列表；`df[source_columns]` 必须是 bool 类型。

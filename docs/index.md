@@ -12,6 +12,7 @@ Hotspot module 热图，以及 labelme 区域注释处理流程。
 - 单细胞 UMAP 高亮：查看指定类别细胞的位置及其基因表达。
 - Hotspot 热图：展示 module 局部相关性聚类结果。
 - labelme 注释处理：将 JSON 标注转换成 mask，并投射回 `adata.obs`。
+- obs 注释更新：按外部 dataframe 直接更新注释列，或用 bool 标记列做条件更新。
 
 ## 安装
 
